@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pomodoro & YouTube Background</title>
+    <style>
+        :root {
+            --primary: #ff4757;
+            --secondary: #2ed573;
+            --dark: #2f3542;
+            --text: #ffffff;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        /* --- CSS CHO VIDEO NỀN --- */
+        .video-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+            opacity: 0.6;
+        }
+        .video-background iframe {
+            width: 100vw;
+            height: 56.25vw;
+            min-height: 100vh;
+            min-width: 177.77vh;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        /* --- CSS CHO BẢNG ĐIỀU KHIỂN --- */
+        .container {
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.8);
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            z-index: 10;
+        }
+        h1 { margin-top: 0; font-size: 24px; color: #ffa502; }
+        
+        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            outline: none;
+            font-size: 14px;
+            background: rgba(255,255,255,0.9);
+        }
+        button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s ease;
+            color: white;
+            font-size: 14px;
+        }
+        button:hover { opacity: 0.8; transform: scale(1.05); }
+        button:disabled { background-color: #747d8c !important; cursor: not-allowed; transform: none; }
+        
+        .btn-load { background-color: #1e90ff; }
+        .btn-mode { background-color: #3742fa; margin: 5px; }
+        .btn-action { background-color: var(--primary); font-size: 20px; padding: 15px 40px; margin-top: 20px; border-radius: 50px;}
+        
+        /* CSS cho cụm điều khiển nhạc */
+        .music-controls {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .music-controls button { background-color: #57606f; padding: 8px 15px; }
+        .volume-control { display: flex; align-items: center; gap: 10px; font-weight: bold; }
+        input[type="range"] { cursor: pointer; }
+
+        #timer {
+            font-size: 80px;
+            font-weight: bold;
+            margin: 10px 0;
+            font-variant-numeric: tabular-nums;
+            text-shadow: 0 0 15px rgba(255,255,255,0.3);
+        }
+        #status {
+            font-size: 18px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+        .is-break #status { color: var(--secondary); }
+    </style>
+</head>
+<body>
+
+<div class="video-background">
+    <div id="ytplayer"></div>
+</div>
+
+<div class="container" id="app">
+    <h1>🍅 Lofi Background & Pomodoro</h1>
+    
+    <div class="input-group">
+        <input type="text" id="playlistUrl" placeholder="Dán link Playlist YouTube vào đây..." value="https://youtube.com/playlist?list=PL9629M0pEZ2-NPjzZEq8y344p2e_hOfph&si=7AsINfnZkLnmlODY">
+        <button id="btnLoad" class="btn-load" onclick="loadPlaylist()" disabled>Đang tải...</button>
+    </div>
+
+    <div class="music-controls">
+        <button onclick="prevVideo()">⏮ Trước</button>
+        <button onclick="nextVideo()">Tiếp ⏭</button>
+        <div class="volume-control">
+            🔊
+            <input type="range" id="volSlider" min="0" max="100" value="100" oninput="changeVolume(this.value)">
+        </div>
+    </div>
+
+    <div>
+        <button class="btn-mode" onclick="setMode(25, 10)">Pomodoro 25/10</button>
+        <button class="btn-mode" onclick="setMode(50, 10)">Pomodoro 50/10</button>
+    </div>
+
+    <div id="status">Sẵn sàng tập trung!</div>
+    <div id="timer">25:00</div>
+    
+    <button id="startBtn" class="btn-action" onclick="toggleTimer()">BẮT ĐẦU</button>
+
+    <audio id="bellSound" src="tinh.mp3" preload="auto"></audio>
+</div>
+
+<script>
+    // ==========================================
+    // 1. CÀI ĐẶT YOUTUBE IFrame API
+    // ==========================================
+    let player;
+    let isPlayerReady = false;
+    let userVolume = 100;
+
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    const firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+    function onYouTubeIframeAPIReady() {
+        player = new YT.Player('ytplayer', {
+            playerVars: {
+                'autoplay': 0,
+                'controls': 0,
+                'disablekb': 1,
+                'rel': 0,
+                'modestbranding': 1
+            },
+            events: {
+                'onReady': onPlayerReady,
+                'onError': onPlayerError
+            }
+        });
+    }
+
+    function onPlayerReady(event) {
+        isPlayerReady = true;
+        const btnLoad = document.getElementById('btnLoad');
+        btnLoad.textContent = "Tải Playlist";
+        btnLoad.disabled = false;
+        player.setVolume(userVolume);
+    }
+
+    function onPlayerError(event) {
+        if (event.data === 101 || event.data === 150) {
+            console.log("Video lỗi bản quyền nhúng, đang tự động next...");
+            setTimeout(() => { player.nextVideo(); }, 1500);
+        }
+    }
+
+    function extractPlaylistId(url) {
+        const reg = /[?&]list=([^#\&\?]+)/;
+        const match = url.match(reg);
+        return match && match[1] ? match[1] : null;
+    }
+
+    function loadPlaylist() {
+        if (!isPlayerReady) return;
+        const url = document.getElementById('playlistUrl').value;
+        const playlistId = extractPlaylistId(url);
+        
+        if (playlistId) {
+            player.cuePlaylist({
+                listType: 'playlist',
+                list: playlistId
+            });
+            player.setLoop(true);
+            
+            // XÓA BỎ ALERT - THAY BẰNG HIỆU ỨNG TRÊN NÚT BẤM
+            const btnLoad = document.getElementById('btnLoad');
+            btnLoad.textContent = "Đã tải xong ✅";
+            btnLoad.style.backgroundColor = "var(--secondary)"; // Đổi sang màu xanh lá
+            
+            // Trả lại nút như cũ sau 3 giây
+            setTimeout(() => {
+                btnLoad.textContent = "Tải Playlist";
+                btnLoad.style.backgroundColor = "#1e90ff"; // Đổi lại màu xanh dương
+            }, 3000);
+
+        } else {
+            alert('Lỗi: Link không hợp lệ (Không tìm thấy đoạn list=...)');
+        }
+    }
+
+    function nextVideo() { if(isPlayerReady) player.nextVideo(); }
+    function prevVideo() { if(isPlayerReady) player.previousVideo(); }
+    
+    function changeVolume(val) { 
+        userVolume = parseInt(val);
+        if (isPlayerReady) {
+            if (!isWorkPhase) {
+                player.setVolume(userVolume / 2);
+            } else {
+                player.setVolume(userVolume);
+            }
+        }
+    }
+
+    // ==========================================
+    // 2. CÀI ĐẶT BỘ ĐẾM POMODORO
+    // ==========================================
+    let workMinutes = 25;
+    let breakMinutes = 10;
+    let timeLeft = workMinutes * 60;
+    let isWorkPhase = true;
+    let isRunning = false;
+    let timerInterval = null;
+
+    const timerDisplay = document.getElementById('timer');
+    const statusDisplay = document.getElementById('status');
+    const startBtn = document.getElementById('startBtn');
+    const appContainer = document.getElementById('app');
+    const bellSound = document.getElementById('bellSound');
+
+    function updateDisplay() {
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    function setMode(work, brk) {
+        if (isRunning) return alert('Hãy Tạm dừng trước khi đổi chế độ!');
+        workMinutes = work;
+        breakMinutes = brk;
+        isWorkPhase = true;
+        timeLeft = workMinutes * 60;
+        statusDisplay.textContent = `Sẵn sàng (${work}/${brk})`;
+        appContainer.classList.remove('is-break');
+        updateDisplay();
+    }
+
+    function playBell() {
+        bellSound.currentTime = 0;
+        bellSound.play().catch(e => console.log("Lỗi phát âm thanh:", e));
+    }
+
+    function toggleTimer() {
+        if (isRunning) {
+            clearInterval(timerInterval);
+            isRunning = false;
+            startBtn.textContent = "TIẾP TỤC";
+            startBtn.style.backgroundColor = "#ff4757";
+            if (isPlayerReady) player.pauseVideo();
+        } else {
+            isRunning = true;
+            startBtn.textContent = "TẠM DỪNG";
+            startBtn.style.backgroundColor = "#ffa502";
+            statusDisplay.textContent = isWorkPhase ? "Đang tập trung..." : "Đang nghỉ ngơi...";
+            
+            if (isPlayerReady) {
+                player.playVideo();
+                player.setVolume(isWorkPhase ? userVolume : userVolume / 2);
+            }
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                updateDisplay();
+
+                if (timeLeft <= 0) {
+                    playBell();
+                    isWorkPhase = !isWorkPhase;
+                    
+                    if (isWorkPhase) {
+                        timeLeft = workMinutes * 60;
+                        statusDisplay.textContent = "Đang tập trung...";
+                        appContainer.classList.remove('is-break');
+                        if (isPlayerReady) player.setVolume(userVolume);
+                    } else {
+                        timeLeft = breakMinutes * 60;
+                        statusDisplay.textContent = "Đang nghỉ ngơi...";
+                        appContainer.classList.add('is-break');
+                        if (isPlayerReady) player.setVolume(userVolume / 2);
+                    }
+                }
+            }, 1000);
+        }
+    }
+
+    updateDisplay();
+</script>
+</body>
+</html>
