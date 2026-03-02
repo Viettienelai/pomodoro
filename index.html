@@ -84,7 +84,7 @@
         button:hover { opacity: 0.8; transform: scale(1.05); }
         button:disabled { background-color: #747d8c !important; cursor: not-allowed; transform: none; }
         
-        .btn-load { background-color: #1e90ff; }
+        .btn-load { background-color: #1e90ff; min-width: 110px;}
         .btn-mode { background-color: #3742fa; margin: 5px; }
         .btn-action { background-color: var(--primary); font-size: 20px; padding: 15px 40px; margin-top: 20px; border-radius: 50px;}
         
@@ -131,8 +131,8 @@
     <h1>🍅 Lofi Background & Pomodoro</h1>
     
     <div class="input-group">
-        <input type="text" id="playlistUrl" placeholder="Dán link Playlist YouTube vào đây..." value="https://youtube.com/playlist?list=PL9629M0pEZ2-NPjzZEq8y344p2e_hOfph&si=7AsINfnZkLnmlODY">
-        <button id="btnLoad" class="btn-load" onclick="loadPlaylist()" disabled>Đang tải...</button>
+        <input type="text" id="playlistUrl" placeholder="Dán link Video hoặc Playlist YouTube vào đây..." value="https://youtube.com/playlist?list=PL9629M0pEZ2-NPjzZEq8y344p2e_hOfph&si=7AsINfnZkLnmlODY">
+        <button id="btnLoad" class="btn-load" onclick="loadMedia()" disabled>Đang tải...</button>
     </div>
 
     <div class="music-controls">
@@ -189,7 +189,7 @@
     function onPlayerReady(event) {
         isPlayerReady = true;
         const btnLoad = document.getElementById('btnLoad');
-        btnLoad.textContent = "Tải Playlist";
+        btnLoad.textContent = "Tải Nhạc";
         btnLoad.disabled = false;
         player.setVolume(userVolume);
     }
@@ -201,38 +201,61 @@
         }
     }
 
-    function extractPlaylistId(url) {
-        const reg = /[?&]list=([^#\&\?]+)/;
-        const match = url.match(reg);
-        return match && match[1] ? match[1] : null;
+    // Hàm phân tích URL mới: Hỗ trợ cả Video và Playlist
+    function extractMediaInfo(url) {
+        let videoId = null;
+        let playlistId = null;
+
+        // Lấy ID Playlist (nếu có list=...)
+        const listMatch = url.match(/[?&]list=([^#\&\?]+)/);
+        if (listMatch && listMatch[1]) {
+            playlistId = listMatch[1];
+        }
+
+        // Lấy ID Video (nếu có v=... hoặc dạng youtu.be/...)
+        const videoMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+        if (videoMatch && videoMatch[1]) {
+            videoId = videoMatch[1];
+        }
+
+        return { videoId, playlistId };
     }
 
-    function loadPlaylist() {
+    function loadMedia() {
         if (!isPlayerReady) return;
         const url = document.getElementById('playlistUrl').value;
-        const playlistId = extractPlaylistId(url);
+        const media = extractMediaInfo(url);
         
-        if (playlistId) {
+        if (media.playlistId) {
+            // NẾU LÀ PLAYLIST
             player.cuePlaylist({
                 listType: 'playlist',
-                list: playlistId
+                list: media.playlistId
             });
             player.setLoop(true);
-            
-            // XÓA BỎ ALERT - THAY BẰNG HIỆU ỨNG TRÊN NÚT BẤM
-            const btnLoad = document.getElementById('btnLoad');
-            btnLoad.textContent = "Đã tải xong ✅";
-            btnLoad.style.backgroundColor = "var(--secondary)"; // Đổi sang màu xanh lá
-            
-            // Trả lại nút như cũ sau 3 giây
-            setTimeout(() => {
-                btnLoad.textContent = "Tải Playlist";
-                btnLoad.style.backgroundColor = "#1e90ff"; // Đổi lại màu xanh dương
-            }, 3000);
-
+            showSuccessBtn();
+        } else if (media.videoId) {
+            // NẾU LÀ 1 VIDEO ĐƠN LẺ
+            // Mẹo: Tải 1 video dưới dạng playlist để nó có thể tự động lặp (Loop) liên tục
+            player.cuePlaylist({
+                playlist: media.videoId
+            });
+            player.setLoop(true);
+            showSuccessBtn();
         } else {
-            alert('Lỗi: Link không hợp lệ (Không tìm thấy đoạn list=...)');
+            alert('Lỗi: Không tìm thấy ID của video hoặc playlist trong link.');
         }
+    }
+
+    function showSuccessBtn() {
+        const btnLoad = document.getElementById('btnLoad');
+        btnLoad.textContent = "Đã tải xong ✅";
+        btnLoad.style.backgroundColor = "var(--secondary)"; // Màu xanh lá
+        
+        setTimeout(() => {
+            btnLoad.textContent = "Tải Nhạc";
+            btnLoad.style.backgroundColor = "#1e90ff"; // Về lại xanh dương
+        }, 3000);
     }
 
     function nextVideo() { if(isPlayerReady) player.nextVideo(); }
