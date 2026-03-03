@@ -61,7 +61,8 @@
         }
         h1 { margin-top: 0; font-size: 24px; color: #ffa502; }
         
-        .input-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 12px; }
+        .input-group:last-of-type { margin-bottom: 20px; }
         input[type="text"] {
             flex: 1;
             padding: 12px;
@@ -84,7 +85,7 @@
         button:hover { opacity: 0.8; transform: scale(1.05); }
         button:disabled { background-color: #747d8c !important; cursor: not-allowed; transform: none; }
         
-        .btn-load { background-color: #1e90ff; min-width: 110px;}
+        .btn-load { background-color: #1e90ff; min-width: 115px;}
         .btn-mode { background-color: #3742fa; margin: 5px; }
         .btn-action { background-color: var(--primary); font-size: 20px; padding: 15px 40px; margin-top: 20px; border-radius: 50px;}
         
@@ -103,6 +104,26 @@
         .music-controls button { background-color: #57606f; padding: 8px 15px; }
         .volume-control { display: flex; align-items: center; gap: 10px; font-weight: bold; }
         input[type="range"] { cursor: pointer; }
+
+        /* Tùy chọn Bắt đầu bằng */
+        .phase-selector {
+            margin: 15px 0;
+            font-size: 15px;
+            font-weight: bold;
+            background: rgba(255, 255, 255, 0.1);
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 30px;
+        }
+        .phase-selector label {
+            margin-left: 15px;
+            cursor: pointer;
+        }
+        .phase-selector input {
+            accent-color: #ffa502;
+            transform: scale(1.2);
+            margin-right: 5px;
+        }
 
         #timer {
             font-size: 80px;
@@ -131,8 +152,13 @@
     <h1>🍅 Lofi Background & Pomodoro</h1>
     
     <div class="input-group">
-        <input type="text" id="playlistUrl" placeholder="Dán link Video hoặc Playlist YouTube vào đây..." value="https://youtube.com/playlist?list=PL9629M0pEZ2-NPjzZEq8y344p2e_hOfph&si=7AsINfnZkLnmlODY">
-        <button id="btnLoad" class="btn-load" onclick="loadMedia()" disabled>Đang tải...</button>
+        <input type="text" id="playlistUrl" placeholder="Link Playlist YouTube..." value="https://youtube.com/playlist?list=PL9629M0pEZ2-NPjzZEq8y344p2e_hOfph&si=7AsINfnZkLnmlODY">
+        <button id="btnLoadPlaylist" class="btn-load" onclick="loadPlaylist()" disabled>Đang tải...</button>
+    </div>
+
+    <div class="input-group">
+        <input type="text" id="videoUrl" placeholder="Link 1 Video YouTube..." value="https://youtu.be/nMfPqeZjc2c?si=b9IjFwRV1YjKX_7E">
+        <button id="btnLoadVideo" class="btn-load" onclick="loadSingleVideo()" disabled>Đang tải...</button>
     </div>
 
     <div class="music-controls">
@@ -147,6 +173,12 @@
     <div>
         <button class="btn-mode" onclick="setMode(25, 10)">Pomodoro 25/10</button>
         <button class="btn-mode" onclick="setMode(50, 10)">Pomodoro 50/10</button>
+    </div>
+
+    <div class="phase-selector">
+        Bắt đầu với:
+        <label><input type="radio" name="startPhase" value="work" checked onchange="changeStartPhase()"> Tập trung</label>
+        <label><input type="radio" name="startPhase" value="break" onchange="changeStartPhase()"> Nghỉ ngơi</label>
     </div>
 
     <div id="status">Sẵn sàng tập trung!</div>
@@ -188,9 +220,16 @@
 
     function onPlayerReady(event) {
         isPlayerReady = true;
-        const btnLoad = document.getElementById('btnLoad');
-        btnLoad.textContent = "Tải Nhạc";
-        btnLoad.disabled = false;
+        
+        // Kích hoạt cả 2 nút
+        const btnPlaylist = document.getElementById('btnLoadPlaylist');
+        btnPlaylist.textContent = "Tải Playlist";
+        btnPlaylist.disabled = false;
+
+        const btnVideo = document.getElementById('btnLoadVideo');
+        btnVideo.textContent = "Tải Video";
+        btnVideo.disabled = false;
+
         player.setVolume(userVolume);
     }
 
@@ -201,60 +240,46 @@
         }
     }
 
-    // Hàm phân tích URL mới: Hỗ trợ cả Video và Playlist
-    function extractMediaInfo(url) {
-        let videoId = null;
-        let playlistId = null;
-
-        // Lấy ID Playlist (nếu có list=...)
-        const listMatch = url.match(/[?&]list=([^#\&\?]+)/);
-        if (listMatch && listMatch[1]) {
-            playlistId = listMatch[1];
-        }
-
-        // Lấy ID Video (nếu có v=... hoặc dạng youtu.be/...)
-        const videoMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-        if (videoMatch && videoMatch[1]) {
-            videoId = videoMatch[1];
-        }
-
-        return { videoId, playlistId };
-    }
-
-    function loadMedia() {
+    // --- XỬ LÝ NÚT TẢI PLAYLIST ---
+    function loadPlaylist() {
         if (!isPlayerReady) return;
         const url = document.getElementById('playlistUrl').value;
-        const media = extractMediaInfo(url);
+        const match = url.match(/[?&]list=([^#\&\?]+)/);
         
-        if (media.playlistId) {
-            // NẾU LÀ PLAYLIST
-            player.cuePlaylist({
-                listType: 'playlist',
-                list: media.playlistId
-            });
+        if (match && match[1]) {
+            player.cuePlaylist({ listType: 'playlist', list: match[1] });
             player.setLoop(true);
-            showSuccessBtn();
-        } else if (media.videoId) {
-            // NẾU LÀ 1 VIDEO ĐƠN LẺ
-            // Mẹo: Tải 1 video dưới dạng playlist để nó có thể tự động lặp (Loop) liên tục
-            player.cuePlaylist({
-                playlist: media.videoId
-            });
-            player.setLoop(true);
-            showSuccessBtn();
+            showSuccessBtn('btnLoadPlaylist', 'Tải Playlist');
         } else {
-            alert('Lỗi: Không tìm thấy ID của video hoặc playlist trong link.');
+            alert('Lỗi: Không tìm thấy ID Playlist (list=...) trong link.');
         }
     }
 
-    function showSuccessBtn() {
-        const btnLoad = document.getElementById('btnLoad');
-        btnLoad.textContent = "Đã tải xong ✅";
-        btnLoad.style.backgroundColor = "var(--secondary)"; // Màu xanh lá
+    // --- XỬ LÝ NÚT TẢI VIDEO ĐƠN LẺ ---
+    function loadSingleVideo() {
+        if (!isPlayerReady) return;
+        const url = document.getElementById('videoUrl').value;
+        const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+        
+        if (match && match[1]) {
+            // Mẹo lặp 1 video: nạp nó vào dưới dạng playlist có 1 bài
+            player.cuePlaylist({ playlist: match[1] });
+            player.setLoop(true);
+            showSuccessBtn('btnLoadVideo', 'Tải Video');
+        } else {
+            alert('Lỗi: Không tìm thấy ID Video trong link.');
+        }
+    }
+
+    // --- HIỆU ỨNG ĐỔI MÀU NÚT KHI TẢI THÀNH CÔNG ---
+    function showSuccessBtn(btnId, originalText) {
+        const btn = document.getElementById(btnId);
+        btn.textContent = "Đã tải ✅";
+        btn.style.backgroundColor = "var(--secondary)"; 
         
         setTimeout(() => {
-            btnLoad.textContent = "Tải Nhạc";
-            btnLoad.style.backgroundColor = "#1e90ff"; // Về lại xanh dương
+            btn.textContent = originalText;
+            btn.style.backgroundColor = "#1e90ff"; 
         }, 3000);
     }
 
@@ -277,8 +302,8 @@
     // ==========================================
     let workMinutes = 25;
     let breakMinutes = 10;
-    let timeLeft = workMinutes * 60;
     let isWorkPhase = true;
+    let timeLeft = workMinutes * 60;
     let isRunning = false;
     let timerInterval = null;
 
@@ -294,14 +319,37 @@
         timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
+    function changeStartPhase() {
+        if (isRunning) return alert('Hãy tạm dừng trước khi đổi chu kỳ bắt đầu!');
+        
+        const phase = document.querySelector('input[name="startPhase"]:checked').value;
+        isWorkPhase = (phase === 'work');
+        timeLeft = (isWorkPhase ? workMinutes : breakMinutes) * 60;
+        
+        statusDisplay.textContent = isWorkPhase ? "Sẵn sàng tập trung!" : "Sẵn sàng nghỉ ngơi!";
+        if (!isWorkPhase) {
+            appContainer.classList.add('is-break');
+        } else {
+            appContainer.classList.remove('is-break');
+        }
+        updateDisplay();
+    }
+
     function setMode(work, brk) {
         if (isRunning) return alert('Hãy Tạm dừng trước khi đổi chế độ!');
         workMinutes = work;
         breakMinutes = brk;
-        isWorkPhase = true;
-        timeLeft = workMinutes * 60;
-        statusDisplay.textContent = `Sẵn sàng (${work}/${brk})`;
-        appContainer.classList.remove('is-break');
+        
+        const phase = document.querySelector('input[name="startPhase"]:checked').value;
+        isWorkPhase = (phase === 'work');
+        timeLeft = (isWorkPhase ? workMinutes : breakMinutes) * 60;
+        
+        statusDisplay.textContent = isWorkPhase ? `Sẵn sàng (${work}/${brk})` : `Sẵn sàng nghỉ (${brk}p)`;
+        if (!isWorkPhase) {
+            appContainer.classList.add('is-break');
+        } else {
+            appContainer.classList.remove('is-break');
+        }
         updateDisplay();
     }
 
@@ -341,11 +389,13 @@
                         statusDisplay.textContent = "Đang tập trung...";
                         appContainer.classList.remove('is-break');
                         if (isPlayerReady) player.setVolume(userVolume);
+                        document.querySelector('input[value="work"]').checked = true;
                     } else {
                         timeLeft = breakMinutes * 60;
                         statusDisplay.textContent = "Đang nghỉ ngơi...";
                         appContainer.classList.add('is-break');
                         if (isPlayerReady) player.setVolume(userVolume / 2);
+                        document.querySelector('input[value="break"]').checked = true;
                     }
                 }
             }, 1000);
